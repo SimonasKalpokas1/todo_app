@@ -12,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:provider/provider.dart';
 import 'package:todo_app/models/base_task.dart';
+import 'package:todo_app/models/category.dart';
 import 'package:todo_app/models/checked_task.dart';
 import 'package:todo_app/models/timed_task.dart';
 
@@ -25,13 +26,20 @@ class MockFirestoreService extends Mock implements FirestoreService {
   var one = CheckedTaskListenable("One", "one desc", Reoccurrence.daily);
 
   MockFirestoreService() {
-    one.id = "abc";
     streamController.add([
       TimedTaskListenable('TimedOne', 'timedOne desc',
           Reoccurrence.notRepeating, const Duration(days: 1)),
       one,
       CheckedTaskListenable("Two", "two desc", Reoccurrence.weekly),
       CheckedTaskListenable("Three", "three desc", Reoccurrence.notRepeating),
+    ]);
+  }
+  @override
+  Stream<Iterable<Category>> getCategories() {
+    return Stream.value([
+      Category(0xFF000000, "Category 1"),
+      Category(0xFF000000, "Category 2"),
+      Category(0xFF000000, "Category 3"),
     ]);
   }
 
@@ -43,7 +51,7 @@ class MockFirestoreService extends Mock implements FirestoreService {
   @override
   Future<void> updateTaskFields(
       String? taskId, Map<String, dynamic> fields) async {
-    if (taskId == "abc" && fields.length == 1 && fields["lastDoneOn"] != null) {
+    if (fields.length == 1 && fields["lastDoneOn"] != null) {
       one.lastDoneOn = DateTime.parse(fields["lastDoneOn"]);
       streamController.add([
         TimedTaskListenable('TimedOne', 'timedOne desc',
@@ -61,12 +69,14 @@ class MockFirestoreService extends Mock implements FirestoreService {
 void main() {
   testWidgets('Widget loading test', (WidgetTester tester) async {
     final mockFirestoreService = MockFirestoreService();
+    var categories = await mockFirestoreService.getCategories().first;
     // Build our app and trigger a frame.
     await tester.pumpWidget(MultiProvider(
       providers: [
-        Provider<FirestoreService>(
-          create: (_) => mockFirestoreService,
-        ),
+        Provider<FirestoreService>(create: (_) => mockFirestoreService),
+        StreamProvider<Iterable<Category>>.value(
+            value: mockFirestoreService.getCategories(),
+            initialData: categories),
       ],
       child: const MaterialApp(home: TasksViewScreen()),
     ));

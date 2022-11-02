@@ -20,7 +20,6 @@ class MockFirestoreService extends Mock implements FirestoreService {
   MockFirestoreService() {
     task.addListener(() {
       assert(task.type == TaskType.timed);
-      assert(task.id == null);
 
       streamController.add(() {});
     });

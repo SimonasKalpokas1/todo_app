@@ -1,38 +1,39 @@
 import 'package:clock/clock.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:todo_app/models/checked_task.dart';
+import 'package:todo_app/models/entity.dart';
 import 'package:todo_app/models/timed_task.dart';
 
 abstract class BaseTaskListenable implements Listenable, BaseTask {
   void refreshState();
 
-  factory BaseTaskListenable.createTaskListenable(
-      String? id, Map<String, dynamic> map) {
+  factory BaseTaskListenable.createTaskListenable(Map<String, dynamic> map) {
     switch (TaskType.values[map['type']]) {
       case TaskType.checked:
-        return CheckedTaskListenable.fromMap(id, map);
+        return CheckedTaskListenable.fromMap(map);
       case TaskType.timed:
-        return TimedTaskListenable.fromMap(id, map);
+        return TimedTaskListenable.fromMap(map);
     }
   }
 }
 
-abstract class BaseTask {
-  String? id;
+abstract class BaseTask extends Entity {
   String name;
   String description;
+  String? categoryId;
   DateTime? lastDoneOn;
   Reoccurrence reoccurrence;
   TaskType type;
 
-  BaseTask(this.type, this.name, this.description, this.reoccurrence);
+  BaseTask(this.type, this.name, this.description, this.reoccurrence)
+      : super.create();
 
-  factory BaseTask.createTask(String? id, Map<String, dynamic> map) {
+  factory BaseTask.createTask(Map<String, dynamic> map) {
     switch (TaskType.values[map['type']]) {
       case TaskType.checked:
-        return CheckedTask.fromMap(id, map);
+        return CheckedTask.fromMap(map);
       case TaskType.timed:
-        return TimedTask.fromMap(id, map);
+        return TimedTask.fromMap(map);
     }
   }
 
@@ -42,22 +43,30 @@ abstract class BaseTask {
 
   bool get isDone => calculateCurrentStatus() == Status.done;
 
-  Map<String, dynamic> toMap() => {
-        'name': name,
-        'description': description,
-        'lastDoneOn': lastDoneOn?.toIso8601String(),
-        'reoccurrence': reoccurrence.index,
-        'type': type.index,
-      };
+  @override
+  Map<String, dynamic> toMap() {
+    var map = super.toMap();
+    map.addAll({
+      'name': name,
+      'description': description,
+      'lastDoneOn': lastDoneOn?.toIso8601String(),
+      'reoccurrence': reoccurrence.index,
+      'type': type.index,
+      'categoryId': categoryId,
+    });
+    return map;
+  }
 
-  BaseTask.fromMap(this.id, Map<String, dynamic> map)
+  BaseTask.fromMap(Map<String, dynamic> map)
       : name = map['name'],
         description = map['description'],
         lastDoneOn = map['lastDoneOn'] == null
             ? null
             : DateTime.parse(map['lastDoneOn']),
         type = TaskType.values[map['type']],
-        reoccurrence = Reoccurrence.values[map['reoccurrence']];
+        reoccurrence = Reoccurrence.values[map['reoccurrence']],
+        categoryId = map['categoryId'],
+        super.fromMap(map);
 }
 
 enum Status {

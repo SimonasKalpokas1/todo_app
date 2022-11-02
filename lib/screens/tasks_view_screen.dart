@@ -1,9 +1,12 @@
 import 'dart:async';
 
 import 'package:clock/clock.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:todo_app/constants.dart';
 import 'package:todo_app/models/base_task.dart';
+import 'package:todo_app/models/category.dart';
 import 'package:todo_app/models/timed_task.dart';
 import 'package:todo_app/services/firestore_service.dart';
 
@@ -44,6 +47,19 @@ class _TasksViewScreenState extends State<TasksViewScreen> {
               color: Color(0xFF666666),
             ),
           ),
+          IconButton(
+            onPressed: () {
+              showDialog<bool?>(
+                  context: context,
+                  builder: (context) => CategorySettingsDialog(
+                      categories: Provider.of<Iterable<Category>>(context,
+                          listen: false)));
+            },
+            icon: const Icon(
+              Icons.category,
+              color: Color(0xFF666666),
+            ),
+          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -68,6 +84,88 @@ class _TasksViewScreenState extends State<TasksViewScreen> {
         child: const Icon(Icons.add),
       ),
     );
+  }
+}
+
+class CategorySettingsDialog extends StatefulWidget {
+  final Iterable<Category> categories;
+
+  const CategorySettingsDialog({Key? key, required this.categories})
+      : super(key: key);
+
+  @override
+  State<CategorySettingsDialog> createState() => _CategorySettingsDialogState();
+}
+
+class _CategorySettingsDialogState extends State<CategorySettingsDialog> {
+  final categoryNameController = TextEditingController();
+  Category? category;
+
+  @override
+  void dispose() {
+    categoryNameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+        title: const Text('Category settings'),
+        content: Column(
+          children: [
+            DropdownButton<Category?>(
+              value: category,
+              items: [
+                const DropdownMenuItem(
+                  value: null,
+                  child: Text('None'),
+                ),
+                ...widget.categories.map((c) => DropdownMenuItem(
+                      value: c,
+                      child: Text(
+                        c.name,
+                        style: TextStyle(color: Color(c.colorValue)),
+                      ),
+                    ))
+              ],
+              onChanged: (value) {
+                setState(() {
+                  category = value;
+                });
+              },
+            ),
+            TextField(
+              autofocus: true,
+              decoration: const InputDecoration(hintText: 'New category name'),
+              controller: categoryNameController,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () {
+                if (category != null &&
+                    categoryNameController.text.isNotEmpty) {
+                  category!.name = categoryNameController.text;
+                  Provider.of<FirestoreService>(context, listen: false)
+                      .updateCategory(category!);
+                }
+                Navigator.pop(context);
+              },
+              child: const Text('OK')),
+          TextButton(
+              onPressed: () {
+                if (category != null) {
+                  Provider.of<FirestoreService>(context, listen: false)
+                      .deleteCategory(category!);
+                }
+                Navigator.pop(context);
+              },
+              child: const Text('Delete')),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+        ]);
   }
 }
 
@@ -147,7 +245,8 @@ class DoneTasksListViewState extends State<DoneTasksListView> {
               children: [
                 const Text(
                   "Completed",
-                  style: TextStyle(fontSize: 18, color: Color(0xFF787878)),
+                  style:
+                      TextStyle(fontSize: fontSize, color: Color(0xFF787878)),
                 ),
                 showDone
                     ? const Icon(Icons.keyboard_arrow_up,
@@ -173,9 +272,12 @@ class TasksListView extends StatelessWidget {
   final bool visible;
   final Stream<Iterable<BaseTask>> tasks;
 
-  const TasksListView(
-      {Key? key, this.condition, required this.tasks, this.visible = true})
-      : super(key: key);
+  const TasksListView({
+    Key? key,
+    this.condition,
+    required this.tasks,
+    this.visible = true,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -199,7 +301,7 @@ class TasksListView extends StatelessWidget {
               if (condition != null && !condition!(task)) {
                 return Container();
               }
-              return TaskCard(task);
+              return TaskCard(task: task);
             },
           ).toList(),
         );
@@ -211,16 +313,28 @@ class TasksListView extends StatelessWidget {
 class TaskCard extends StatelessWidget {
   final BaseTask task;
 
-  const TaskCard(this.task, {Key? key}) : super(key: key);
+  const TaskCard({Key? key, required this.task}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     var firestoreService = Provider.of<FirestoreService>(context);
+    var categories = Provider.of<Iterable<Category>>(context);
+    var category = task.categoryId != null
+        ? categories.firstWhereOrNull((c) => c.id == task.categoryId)
+        : null;
     return Card(
       margin: const EdgeInsets.fromLTRB(15, 8.0, 15, 0),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-        side: BorderSide(color: Color(task.isDone ? 0xFFD7D7D7 : 0xFFFFD699)),
+        borderRadius: BorderRadius.circular(5),
+        side: BorderSide(
+            color: Color(task.isDone
+                ? 0xFFD7D7D7
+                : task.categoryId == null
+                    ? 0xFFFFD699
+                    : categories
+                            .firstWhereOrNull((c) => c.id == task.categoryId)
+                            ?.colorValue ??
+                        0xFFFFD699)),
       ),
       color: task.isDone ? const Color(0xFFF6F6F6) : Colors.white,
       child: Dismissible(
@@ -236,15 +350,44 @@ class TaskCard extends StatelessWidget {
           child: const Icon(Icons.delete_sweep),
         ),
         child: ListTile(
-          contentPadding: const EdgeInsets.only(left: 20),
-          title: Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              task.name,
-              style: TextStyle(
-                  fontSize: 18,
-                  color: task.isDone ? const Color(0xFFDBDBDB) : Colors.black),
-            ),
+          minLeadingWidth: 10,
+          horizontalTitleGap: 7.5,
+          leading: Container(
+            width: 10,
+            decoration: BoxDecoration(
+                color: Color(task.isDone
+                    ? 0xFFF6F6F6
+                    : category?.colorValue ?? 0xFFFFFFFF),
+                borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(5.0),
+                    bottomLeft: Radius.circular(5.0))),
+          ),
+          contentPadding: const EdgeInsets.only(left: 0),
+          title: Column(
+            children: [
+              if (category != null)
+                Align(
+                  alignment: Alignment.topLeft,
+                  child: Text(
+                    category.name,
+                    style: TextStyle(
+                        fontSize: fontSize * 0.6,
+                        color: Color(
+                            task.isDone ? 0xFFDBDBDB : category.colorValue)),
+                  ),
+                ),
+              Align(
+                alignment: Alignment.topLeft,
+                child: Text(
+                  overflow: TextOverflow.ellipsis,
+                  task.name,
+                  style: TextStyle(
+                      fontSize: fontSize,
+                      color:
+                          task.isDone ? const Color(0xFFDBDBDB) : Colors.black),
+                ),
+              )
+            ],
           ),
           onTap: () {
             Navigator.push(
@@ -276,7 +419,8 @@ class TaskCard extends StatelessWidget {
                       });
                     },
                     value: task.isDone,
-                    side: const BorderSide(color: Color(0xFFFFD699)),
+                    side: BorderSide(
+                        color: Color(category?.colorValue ?? 0xFFFFD699)),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(5)),
                     activeColor: const Color(0xFFD9D9D9),

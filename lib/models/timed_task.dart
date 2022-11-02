@@ -7,7 +7,7 @@ class TimedTaskListenable extends TimedTask
   TimedTaskListenable(
       super.name, super.description, super.reoccurrence, super.totalTime);
 
-  TimedTaskListenable.fromMap(super.id, super.map) : super.fromMap();
+  TimedTaskListenable.fromMap(super.map) : super.fromMap();
 
   @override
   void refreshState() {
@@ -177,7 +177,7 @@ class TimedTask extends BaseTask {
   }
 
   @override
-  TimedTask.fromMap(super.id, super.map)
+  TimedTask.fromMap(super.map)
       : totalTime = DurationParse.tryParse(map['totalTime'])!,
         remainingTime = DurationParse.tryParse(map['remainingTime'])!,
         startOfExecution = map['startOfExecution'] == null
